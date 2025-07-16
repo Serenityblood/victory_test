@@ -9,6 +9,11 @@ sqlalchemy = "*"
 alembic = "*"
 uvicorn = "*"
 asyncpg = "*"
+aiogram = "*"
+httpx = "*"
+redis = "*"
+pyjwt = "*"
+tzdata = "*"
 
 [dev-packages]
 black = "*"

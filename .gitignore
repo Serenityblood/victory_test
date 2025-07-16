@@ -177,7 +177,7 @@ cython_debug/
 
 # Abstra
 # Abstra is an AI-powered process automation framework.
-# Ignore directories containing user credentials, local state, and settings.
+# Ignore directories containing users credentials, local state, and settings.
 # Learn more at https://abstra.io/docs
 .abstra/
 
@@ -205,6 +205,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+.idea/
 /.idea/fastapi_template.iml
 /.idea/misc.xml
 /.idea/modules.xml
