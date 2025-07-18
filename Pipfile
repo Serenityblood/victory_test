@@ -14,6 +14,7 @@ httpx = "*"
 redis = "*"
 pyjwt = "*"
 tzdata = "*"
+apscheduler = "*"
 
 [dev-packages]
 black = "*"

@@ -1,13 +1,13 @@
+import logging
 import asyncio
 
 from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 
-from backend.bot.api_accessor import ApiAccessor
-from backend.bot.config import BOT_TOKEN, API_URL, REDIS_URL
-from backend.bot.handlers import router_v1
-from backend.bot.utils import get_api_token
+from api_accessor import ApiAccessor
+from config import BOT_TOKEN, API_URL, REDIS_URL
+from handlers import router_v1
+from utils import get_api_token
 
 
 async def main_polling():
@@ -19,4 +19,9 @@ async def main_polling():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     asyncio.run(main_polling())

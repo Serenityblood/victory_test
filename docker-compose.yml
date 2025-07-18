@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres
+    restart: always
+    expose:
+      - '5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - ./.env
+    healthcheck:
+      test: [ 'CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${DB_NAME}' ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    expose:
+      - '6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    build:
+      context: ./
+      dockerfile: ./backend/Dockerfile
+    restart: always
+    depends_on:
+      - db
+      - redis
+    ports:
+      - '127.0.0.1:${BACKEND_PORT}:8000'
+    env_file:
+      - ./.env
+    command:
+      sh -c "alembic upgrade head &&
+             uvicorn main:app --host 0.0.0.0 --port 8000"
+
+  bot:
+    build:
+      context: ./
+      dockerfile: ./bot/Dockerfile
+    depends_on:
+      - db
+      - redis
+      - backend
+    restart: always
+    env_file:
+      - ./.env
+    command:
+      sh -c "python bot.py"
+
+volumes:
+  postgres_data:
+  redis_data:

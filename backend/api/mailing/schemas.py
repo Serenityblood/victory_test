@@ -4,12 +4,12 @@ from pydantic import BaseModel, field_serializer, ConfigDict, field_validator
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from backend.config import TIMEZONE, DATETIME_FORMAT
+from config import TIMEZONE
 
 
 class MailingCreate(BaseModel):
     name: str
-    send_at: datetime
+    send_at: Optional[datetime] = None
     extra: Dict[str, Any] = {}
     message: str
     creator_id: int

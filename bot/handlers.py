@@ -1,20 +1,19 @@
 import logging
-from datetime import datetime
 
 from aiogram import F, Router, types
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 
-from backend.bot.config import (
+from config import (
     ADMIN_KEY,
     ALLOWED_TO_ADMIN_MENU_ROLES,
     ALLOWED_TO_MAILING_CONSTRUCTOR_ROLES,
     DATETIME_FORMAT,
     ALLOWED_MEDIA_TYPES,
 )
-from backend.bot.states import MailingCreate, AdminMenu
-from backend.bot.templates import start_command_text, error_text, admin_keyboard
-from backend.bot.utils import (
+from states import MailingCreate, AdminMenu
+from templates import start_command_text, error_text, admin_keyboard
+from utils import (
     make_safe_request,
     keyboard_builder,
     build_keyboard_for_mailing_look,
@@ -23,8 +22,8 @@ from backend.bot.utils import (
     to_menu,
     get_constructor,
 )
-from backend.bot.mailingreader import MailingReader
-from backend.bot.mailingconstructor import (
+from mailingreader import MailingReader
+from mailingconstructor import (
     MailingConstructor,
     NameValidationError,
     SendAtValidationError,
@@ -39,6 +38,8 @@ logger = logging.getLogger("HandlerLogger")
 async def start(msg: types.Message):
     output_data = dict()
     splitted = msg.text.split()
+
+    # Проверка на наличие ключа админа
     if len(splitted) > 1:
         if splitted[1] == ADMIN_KEY:
             role = "admin"
@@ -81,6 +82,7 @@ async def adminmenu(msg: types.Message, state: FSMContext):
         await msg.answer(text=response.json()["detail"])
         return
     data = response.json()
+
     if data["role"] not in ALLOWED_TO_ADMIN_MENU_ROLES:
         await msg.answer("Вы не имеете доступа к админ-меню")
         return
@@ -98,9 +100,13 @@ async def get_mailings(clbk: types.CallbackQuery, state: FSMContext):
         await clbk.message.answer(text="Рассылок нет", reply_markup=admin_keyboard)
     mailings_count = len(data)
     index = 0
+
     text = MailingReader(data[index]).render()
     text += f"\n\n Порядковый номер рассылки: {index + 1}/{mailings_count}"
-    await state.set_data(data={"mailing_data": data})
+
+    # Сохраняем полученные рассылки в кэш, чтобы не бегать до API каждый раз
+    # current_index сохраняется для кнопок удаления и изменения
+    await state.set_data(data={"mailing_data": data, "current_index": index})
     await state.set_state(AdminMenu.look_mailings)
     await clbk.answer()
     await clbk.message.answer(
@@ -120,24 +126,29 @@ async def set_index_query(clbk: types.CallbackQuery, state: FSMContext):
 
 
 @router_v1.message(AdminMenu.index_query)
-async def index_search_mailng(msg: types.Message, state: FSMContext):
+async def index_search_mailing(msg: types.Message, state: FSMContext):
     if msg.text == "отмена":
         await state.clear()
         await msg.answer(text="Админ меню", reply_markup=admin_keyboard)
         return
+
     try:
         index = int(msg.text) - 1
     except (ValueError, TypeError):
         await msg.answer(text="Не подходит. Нужно отправить целое число")
         return
+
     redis_data = await state.get_data()
     mailing_data = redis_data.get("mailing_data")
     mailings_count = len(mailing_data)
+
     if not 0 <= index < mailings_count:
         await msg.answer(text=f"Нужно отправить число от 1 до {mailings_count}")
         return
+
     text = MailingReader(mailing_data[index]).render()
     text += f"\n\n Порядковый номер рассылки: {index + 1}/{mailings_count}"
+    await state.update_data(data={"current_index": index})
     await state.set_state(AdminMenu.look_mailings)
     await msg.answer(
         text=text,
@@ -147,18 +158,102 @@ async def index_search_mailng(msg: types.Message, state: FSMContext):
 
 
 @router_v1.callback_query(AdminMenu.look_mailings, F.data.startswith("look_mailings_"))
-async def search_mailing(clbk: types.CallbackQuery, state: FSMContext):
+async def search_mailing_by_order_index(clbk: types.CallbackQuery, state: FSMContext):
     redis_data = await state.get_data()
     mailing_data = redis_data.get("mailing_data")
     index = int(clbk.data.split("look_mailings_")[1])
     mailings_count = len(mailing_data)
+
     text = MailingReader(mailing_data[index]).render()
     text += f"\n\n Порядковый номер рассылки: {index + 1}/{mailings_count}"
+    await state.update_data(data={"current_index": index})
     await clbk.answer()
     await clbk.message.answer(
         text=text,
         reply_markup=build_keyboard_for_mailing_look(index, mailings_count),
         parse_mode="HTML",
+    )
+
+
+@router_v1.callback_query(F.data == "change_mailing")
+async def change_mailing_init(clbk: types.CallbackQuery, state: FSMContext):
+    redis_data = await state.get_data()
+    data = redis_data.get("mailing_data")
+    index = redis_data.get("current_index")
+    mailing = data[index]
+
+    constructor = MailingConstructor(
+        name=mailing["name"],
+        message=mailing["message"],
+        creator_id=mailing["creator_id"],
+        send_at=mailing["send_at"],
+        keyboard=mailing["extra"].get("keyboard", []),
+        media=mailing["extra"].get("media", {}),
+    )
+    await state.update_data(
+        data={
+            "constructor": constructor.to_dict(),
+            "constructor_mode": "update",
+            "mailing_id": mailing["id"],
+        }
+    )
+    await to_menu(constructor, state, clbk)
+
+
+@router_v1.callback_query(F.data == "save_change_mailing")
+async def save_change_mailing(clbk: types.CallbackQuery, state: FSMContext):
+    redis_data = await state.get_data()
+    mailing_id = redis_data.get("mailing_id")
+    constructor = MailingConstructor.from_dict(redis_data["constructor"])
+
+    response = await make_safe_request(
+        clbk.bot.api_accessor.update_mailing,
+        mailing_id=mailing_id,
+        **constructor.to_db(),
+    )
+    if not response:
+        await clbk.answer()
+        await clbk.message.answer(
+            text="Возникли неполадки при отправке, попробуйте позже",
+            reply_markup=build_constructor_keyboard(constructor, mode="create"),
+            parse_mode="HTML",
+        )
+        return
+    if response.status_code == 422:
+        await clbk.answer()
+        await clbk.message.answer(
+            text="Какие-то данные в запросе неправильные. Рассылка не сохранена",
+            reply_markup=build_constructor_keyboard(constructor, mode="create"),
+            parse_mode="HTML",
+        )
+        return
+    logger.info(f"Изменена рассылка {response.json()}")
+    await clbk.answer()
+    await state.clear()
+    await clbk.message.answer(text="Рассылка изменена")
+
+
+@router_v1.callback_query(F.data == "delete_mailing")
+async def delete_mailing(clbk: types.CallbackQuery, state: FSMContext):
+    redis_data = await state.get_data()
+    data = redis_data.get("mailing_data")
+    mailing_id = data[redis_data.get("current_index")]["id"]
+    response = await make_safe_request(clbk.bot.api_accessor.delete_mailing, mailing_id)
+
+    if not response:
+        constructor = MailingConstructor.from_dict(redis_data.get("constructor"))
+        await clbk.answer()
+        await clbk.message.answer(
+            text="Возникли неполадки при отправке, попробуйте позже",
+            reply_markup=build_constructor_keyboard(constructor, mode="update"),
+            parse_mode="HTML",
+        )
+        return
+
+    await state.clear()
+    await clbk.answer()
+    await clbk.message.answer(
+        text="Рассылка удалена",
     )
 
 
@@ -184,11 +279,13 @@ async def get_user_id_to_change(msg: types.Message, state: FSMContext):
         await state.clear()
         await msg.answer(text="Админ меню", reply_markup=admin_keyboard)
         return
+
     try:
         tg_id = int(msg.text)
     except (ValueError, TypeError):
         await msg.answer(text="Не подходит. Нужно отправить целое число")
         return
+
     user_response = await make_safe_request(
         msg.bot.api_accessor.get_user_by_tg_id, tg_id
     )
@@ -202,6 +299,7 @@ async def get_user_id_to_change(msg: types.Message, state: FSMContext):
             + "\nПопробуйте ещё раз или напишите 'отмена'"
         )
         return
+
     await state.set_data(data={"tg_id": tg_id})
     user_data = user_response.json()
     await msg.answer(
@@ -212,11 +310,14 @@ async def get_user_id_to_change(msg: types.Message, state: FSMContext):
             f"Роль: {user_data['role']}"
         )
     )
+
+    # Получение ролей
     roles_response = await make_safe_request(msg.bot.api_accessor.get_user_roles)
     if not roles_response:
         await state.clear()
         await msg.answer(text=error_text)
         return
+
     roles = roles_response.json()["roles"]
     buttons = []
     row = []
@@ -392,10 +493,11 @@ async def get_media_type(msg: types.Message, state: FSMContext):
     media_type = msg.text
     if media_type not in ALLOWED_MEDIA_TYPES:
         await msg.answer(text=f"Нужно выбрать из предложенных: {ALLOWED_MEDIA_TYPES}")
+        return
     await state.update_data(data={"new_media_type": media_type})
     await state.set_state(MailingCreate.new_media_url)
     await msg.answer(
-        text="Отправьте ссылку на вложение. Ссылка должна быть в открытом доступе. Или 'отмена' для отмены добавления"
+        text="Отправьте ссылку на вложение. Или само вложение. Ссылка должна быть в открытом доступе. Или 'отмена' для отмены добавления"
     )
 
 
@@ -406,16 +508,11 @@ async def get_media_url(msg: types.Message, state: FSMContext):
     if msg.text == "отмена":
         await to_menu(constructor, state, msg)
         return
-    url = msg.text
     media_type = redis_data.get("new_media_type")
+    url = constructor.parse_media_url(msg, media_type)
     constructor.add_media(media_type, url)
     await state.update_data(data={"constructor": constructor.to_dict()})
-    await state.set_state(MailingCreate.constructor_menu)
-    await msg.answer(
-        text=constructor.represent(),
-        reply_markup=build_constructor_keyboard(constructor),
-        parse_mode="HTML",
-    )
+    await to_menu(constructor, state, msg)
 
 
 @router_v1.callback_query(F.data == "change_name")
@@ -467,7 +564,7 @@ async def get_new_mailing_message(msg: types.Message, state: FSMContext):
 
 
 @router_v1.callback_query(F.data == "change_send_at")
-async def get_new_mailing_message(clbk: types.CallbackQuery, state: FSMContext):
+async def get_new_mailing_send_at(clbk: types.CallbackQuery, state: FSMContext):
     await state.set_state(MailingCreate.change_send_at)
     await clbk.answer()
     await clbk.message.answer(
@@ -599,7 +696,7 @@ async def save_mailing(clbk: types.CallbackQuery, state: FSMContext):
         await clbk.answer()
         await clbk.message.answer(
             text="Возникли неполадки при отправке, попробуйте позже",
-            reply_markup=build_constructor_keyboard(constructor),
+            reply_markup=build_constructor_keyboard(constructor, mode="create"),
             parse_mode="HTML",
         )
         return
@@ -607,10 +704,11 @@ async def save_mailing(clbk: types.CallbackQuery, state: FSMContext):
         await clbk.answer()
         await clbk.message.answer(
             text="Какие-то данные в запросе неправильные. Рассылка не сохранена",
-            reply_markup=build_constructor_keyboard(constructor),
+            reply_markup=build_constructor_keyboard(constructor, mode="create"),
             parse_mode="HTML",
         )
         return
+    logger.info(f"Создана новая рассылка {response.json()}")
     await clbk.answer()
     await state.clear()
     await clbk.message.answer(text="Рассылка сохранена")
@@ -637,3 +735,9 @@ async def exit_constructor(clbk: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await clbk.answer()
     await clbk.message.answer(text="Вы вышли из конструктора")
+
+
+@router_v1.message(Command("exit"))
+async def get_clear(msg: types.Message, state: FSMContext):
+    await state.clear()
+    await msg.answer(text="Вы чисты как младенец =)")

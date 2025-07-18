@@ -3,8 +3,8 @@ from typing import Optional, List
 
 from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
-from backend.db.models.models import Role
-from backend.api.utils import to_main_tz
+from db.models.models import Role
+from api.utils import to_main_tz
 
 
 class UserCreate(BaseModel):

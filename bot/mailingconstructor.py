@@ -1,7 +1,10 @@
 from datetime import datetime
-from typing import List, Dict, Optional
+from zoneinfo import ZoneInfo
+from typing import Dict, Optional
 
-from backend.bot.config import MAX_NAME_SIZE, DATETIME_FORMAT
+from aiogram import types
+
+from config import MAX_NAME_SIZE, DATETIME_FORMAT, TIMEZONE
 
 
 class NameValidationError(Exception):
@@ -50,13 +53,12 @@ class MailingConstructor:
             "message": self._message,
             "creator_id": self._creator_id,
             "send_at": self._send_at,
-            "keyboard": self._keyboard,
-            "media": self._media,
+            "extra": {"keyboard": self._keyboard, "media": self._media}
         }
 
     @classmethod
     def from_dict(cls, d: dict):
-        return cls(**d)
+        return cls(name=d["name"], message=d["message"], creator_id=d["creator_id"], send_at=d["send_at"], keyboard=d["extra"].get("keyboard", []), media=d["extra"].get("media", {}))
 
     def add_button(self, text, url) -> None:
         self._keyboard.append({"text": text, "url": url})
@@ -87,7 +89,7 @@ class MailingConstructor:
     def change_send_at(self, send_at: str) -> None:
         if not self.validate_send_at(send_at):
             raise SendAtValidationError(
-                f"Неправильный формат даты. Нужен {self.DATETIME_FORMAT}"
+                f"Неправильный формат даты. Нужен {self.DATETIME_FORMAT}. Или указано время до нынешнего момента."
             )
         self._send_at = self.convert_datestring_to_correct_format(send_at)
 
@@ -100,9 +102,9 @@ class MailingConstructor:
         if self._send_at:
             data.update({"send_at": self._send_at})
         extra = dict()
-        if self._keyboard:
+        if self.has_keyboard:
             extra.update({"keyboard": self._keyboard})
-        if self._media:
+        if self.has_media:
             extra.update({"media": self._media})
         if extra:
             data.update({"extra": extra})
@@ -112,13 +114,22 @@ class MailingConstructor:
         text = (
             f"Название: {self._name}\n"
             f"Сообщение:\n{self._message}\n\n"
-            f"Время отправки МСК: {self._send_at}\n"
+            f"Время отправки МСК: {self._send_at if self._send_at else "сейчас"}\n"
         )
         if self.has_keyboard:
             text += f"Кнопки: \n{'\n'.join([str(b) for b in self._keyboard])}\n\n"
         if self.has_media:
             text += f"Медиа: {self._media}"
         return text
+
+    @staticmethod
+    def parse_media_url(msg: types.Message, media_type):
+        try:
+            content = getattr(msg, media_type)
+            url = content.file_id
+        except AttributeError:
+            url = msg.text
+        return url
 
     @classmethod
     def validate_name(cls, s: str) -> bool:
@@ -127,7 +138,10 @@ class MailingConstructor:
     @classmethod
     def validate_send_at(cls, s: str) -> bool:
         try:
-            datetime.strptime(s, cls.DATETIME_FORMAT)
+            dt = datetime.strptime(s, cls.DATETIME_FORMAT)
+            dt = dt.replace(tzinfo=ZoneInfo(TIMEZONE))
+            if datetime.now(ZoneInfo(TIMEZONE)) > dt:
+                return False
             return True
         except ValueError:
             return False

@@ -5,9 +5,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Text, DateTime, Enum, ForeignKey, String, Integer
 
-from backend.config import MAX_NAME_SIZE
-from .base import Base
-from .mixins import IDMixin, CreatedAtMixin
+from config import MAX_NAME_SIZE
+from db.models.base import Base
+from db.models.mixins import IDMixin, CreatedAtMixin
 
 
 class Role(py_enum):

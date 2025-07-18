@@ -1,4 +1,4 @@
-from .utils import keyboard_builder
+from utils import keyboard_builder
 
 
 start_command_text = "Вы подписались на рассылки от меня =)"

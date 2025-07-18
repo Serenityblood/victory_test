@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "f1512fddd21693f657ef9111dc908e216e99ad58a5bb51bbb1558062f5d05350"
+            "sha256": "3332b96c6a587679e9200a0309d9f5ef9146af287d0ec71b5f8005492900176f"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -165,6 +165,15 @@
             ],
             "markers": "python_version >= '3.9'",
             "version": "==4.9.0"
+        },
+        "apscheduler": {
+            "hashes": [
+                "sha256:4c622d250b0955a65d5d0eb91c33e6d43fd879834bf541e0a18661ae60460133",
+                "sha256:fc134ca32e50f5eadcc4938e3a4545ab19131435e851abb40b34d63d5141c6da"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.8'",
+            "version": "==3.11.0"
         },
         "asyncpg": {
             "hashes": [
@@ -1004,6 +1013,14 @@
             "index": "pypi",
             "markers": "python_version >= '2'",
             "version": "==2025.2"
+        },
+        "tzlocal": {
+            "hashes": [
+                "sha256:cceffc7edecefea1f595541dbd6e990cb1ea3d19bf01b2809f362a03dd7921fd",
+                "sha256:eb1a66c3ef5847adf7a834f1be0800581b683b5608e74f86ecbcef8ab91bb85d"
+            ],
+            "markers": "python_version >= '3.9'",
+            "version": "==5.3.1"
         },
         "uvicorn": {
             "hashes": [
