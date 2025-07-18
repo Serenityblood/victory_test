@@ -161,6 +161,7 @@ async def to_menu(
             reply_markup=build_constructor_keyboard(constructor, mode),
             parse_mode="HTML",
         )
+        await body_entity.message.delete()
     else:
         await state.set_state(MailingCreate.constructor_menu)
         await body_entity.answer(

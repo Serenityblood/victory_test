@@ -94,10 +94,12 @@ async def get_mailings(clbk: types.CallbackQuery, state: FSMContext):
     response = await make_safe_request(clbk.bot.api_accessor.get_mailings)
     if not response:
         await clbk.message.answer(text=error_text)
+        await clbk.message.delete()
         return
     data = response.json()
     if not data:
         await clbk.message.answer(text="Рассылок нет", reply_markup=admin_keyboard)
+        await clbk.message.delete()
     mailings_count = len(data)
     index = 0
 
@@ -114,6 +116,7 @@ async def get_mailings(clbk: types.CallbackQuery, state: FSMContext):
         reply_markup=build_keyboard_for_mailing_look(index, mailings_count),
         parse_mode="HTML",
     )
+    await clbk.message.delete()
 
 
 @router_v1.callback_query(AdminMenu.look_mailings, F.data == "mailing_search")
@@ -173,6 +176,7 @@ async def search_mailing_by_order_index(clbk: types.CallbackQuery, state: FSMCon
         reply_markup=build_keyboard_for_mailing_look(index, mailings_count),
         parse_mode="HTML",
     )
+    await clbk.message.delete()
 
 
 @router_v1.callback_query(F.data == "change_mailing")
@@ -218,6 +222,7 @@ async def save_change_mailing(clbk: types.CallbackQuery, state: FSMContext):
             reply_markup=build_constructor_keyboard(constructor, mode="create"),
             parse_mode="HTML",
         )
+        await clbk.message.delete()
         return
     if response.status_code == 422:
         await clbk.answer()
@@ -226,6 +231,7 @@ async def save_change_mailing(clbk: types.CallbackQuery, state: FSMContext):
             reply_markup=build_constructor_keyboard(constructor, mode="create"),
             parse_mode="HTML",
         )
+        await clbk.message.delete()
         return
     logger.info(f"Изменена рассылка {response.json()}")
     await clbk.answer()
@@ -248,6 +254,7 @@ async def delete_mailing(clbk: types.CallbackQuery, state: FSMContext):
             reply_markup=build_constructor_keyboard(constructor, mode="update"),
             parse_mode="HTML",
         )
+        await clbk.message.delete()
         return
 
     await state.clear()
@@ -262,6 +269,7 @@ async def exit_mailings(clbk: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await clbk.answer()
     await clbk.message.answer(text="Админ меню", reply_markup=admin_keyboard)
+    await clbk.message.delete()
 
 
 @router_v1.callback_query(F.data == "change_role")
@@ -271,6 +279,7 @@ async def set_change_role(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.message.answer(
         text="Пришлите айди пользователя, чью роль хотите изменить. Или напишите 'отмена' для выхода"
     )
+    await clbk.message.delete()
 
 
 @router_v1.message(AdminMenu.choose_tg_id)
@@ -344,11 +353,13 @@ async def change_role(clbk: types.CallbackQuery, state: FSMContext):
     if not response:
         await state.clear()
         await clbk.message.answer(text=error_text)
+        await clbk.message.delete()
         return
     await state.clear()
     await clbk.answer()
     await clbk.message.answer(text="Роль пользователя успешно изменена")
     await clbk.message.answer(text="Админ меню", reply_markup=admin_keyboard)
+    await clbk.message.delete()
 
 
 @router_v1.message(Command("newmailing"))
@@ -443,6 +454,7 @@ async def add_button_to_mailing(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.message.answer(
         text="Введите текст, который будет у кнопки. Или 'отмена' для отмены добавления"
     )
+    await clbk.message.delete()
 
 
 @router_v1.message(MailingCreate.new_button_text)
@@ -481,6 +493,7 @@ async def add_media_to_mailing(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.message.answer(
         text=f"Введите тип вложения из предложенных: {ALLOWED_MEDIA_TYPES}. Или 'отмена' для отмены добавления"
     )
+    await clbk.message.delete()
 
 
 @router_v1.message(MailingCreate.new_media_type)
@@ -510,6 +523,9 @@ async def get_media_url(msg: types.Message, state: FSMContext):
         return
     media_type = redis_data.get("new_media_type")
     url = constructor.parse_media_url(msg, media_type)
+    if not url:
+        await msg.answer(text="Была отправлена пустая строка или неправильный тип вложения(изображения нужно сжимать, иначе они считаются документом)")
+        return
     constructor.add_media(media_type, url)
     await state.update_data(data={"constructor": constructor.to_dict()})
     await to_menu(constructor, state, msg)
@@ -522,6 +538,7 @@ async def change_name(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.message.answer(
         text="Придумайте новое название для рассылки или напишите 'отмена' для возвращения в меню"
     )
+    await clbk.message.delete()
 
 
 @router_v1.message(MailingCreate.change_name)
@@ -548,6 +565,7 @@ async def get_new_mailing_message(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.message.answer(
         text="Придумайте новое основное сообщение. Доступна HTML разметка. Напишите 'отмена' для возвращения в меню"
     )
+    await clbk.message.delete()
 
 
 @router_v1.message(MailingCreate.change_message)
@@ -570,6 +588,7 @@ async def get_new_mailing_send_at(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.message.answer(
         text=f"Введите новую дату в формате {DATETIME_FORMAT}. Напишите 'сразу' для отправки при сохранении. Напишите 'отмена' для возвращения в меню"
     )
+    await clbk.message.delete()
 
 
 @router_v1.message(MailingCreate.change_send_at)
@@ -601,6 +620,7 @@ async def get_button_id(clbk: types.CallbackQuery, state: FSMContext):
     text, kb = generate_choose_index_entities(keyboard, "change_button_")
     await clbk.answer()
     await clbk.message.answer(text=text, reply_markup=kb)
+    await clbk.message.delete()
 
 
 @router_v1.callback_query(F.data.startswith("change_button_"))
@@ -612,6 +632,7 @@ async def change_button(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.message.answer(
         text="Введите новый текст кнопки или 'отмена' для выхода в меню"
     )
+    await clbk.message.delete()
 
 
 @router_v1.message(MailingCreate.change_button_text)
@@ -651,6 +672,7 @@ async def get_delete_button_index(clbk: types.CallbackQuery, state: FSMContext):
     text, kb = generate_choose_index_entities(keyboard, "delete_button_")
     await clbk.answer()
     await clbk.message.answer(text=text, reply_markup=kb)
+    await clbk.message.delete()
 
 
 @router_v1.callback_query(F.data.startswith("delete_button_"))
@@ -670,6 +692,7 @@ async def confirm_delete_media(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.message.answer(
         text="Точно удаляем медиа?", reply_markup=keyboard_builder(buttons)
     )
+    await clbk.message.delete()
 
 
 @router_v1.callback_query(F.data.startswith("delete_media_"))
@@ -699,6 +722,7 @@ async def save_mailing(clbk: types.CallbackQuery, state: FSMContext):
             reply_markup=build_constructor_keyboard(constructor, mode="create"),
             parse_mode="HTML",
         )
+        await clbk.message.delete()
         return
     if response.status_code == 422:
         await clbk.answer()
@@ -712,6 +736,7 @@ async def save_mailing(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.answer()
     await state.clear()
     await clbk.message.answer(text="Рассылка сохранена")
+    await clbk.message.delete()
 
 
 @router_v1.callback_query(F.data == "exit_constructor")
@@ -722,6 +747,7 @@ async def exit_constructor_confirm(clbk: types.CallbackQuery, state: FSMContext)
         text="Точно выходим? Несохраненные данные будут утеряны",
         reply_markup=keyboard_builder(buttons),
     )
+    await clbk.message.delete()
 
 
 @router_v1.callback_query(F.data.startswith("exit_constructor_"))
@@ -735,6 +761,7 @@ async def exit_constructor(clbk: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await clbk.answer()
     await clbk.message.answer(text="Вы вышли из конструктора")
+    await clbk.message.delete()
 
 
 @router_v1.message(Command("exit"))

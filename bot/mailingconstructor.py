@@ -123,10 +123,14 @@ class MailingConstructor:
         return text
 
     @staticmethod
-    def parse_media_url(msg: types.Message, media_type):
+    def parse_media_url(msg: types.Message, media_type: str) -> Optional[str]:
         try:
             content = getattr(msg, media_type)
-            url = content.file_id
+            if media_type == "photo" and type(content) is list:
+                size_count = len(content)
+                url = content[size_count-1].file_id
+            else:
+                url = content.file_id
         except AttributeError:
             url = msg.text
         return url
