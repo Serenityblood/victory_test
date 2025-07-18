@@ -5,18 +5,19 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Text, DateTime, Enum, ForeignKey, String, Integer
 
+from backend.config import MAX_NAME_SIZE
 from .base import Base
 from .mixins import IDMixin, CreatedAtMixin
 
 
 class Role(py_enum):
     admin = "admin"
-    user = "users"
+    user = "user"
     moderator = "moderator"
 
 
 class User(Base, IDMixin, CreatedAtMixin):
-    name: Mapped[str] = mapped_column(String(128), nullable=True)
+    name: Mapped[str] = mapped_column(String(MAX_NAME_SIZE), nullable=True)
     tg_id: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
     # Внести удаление enum поля в downgrade миграции
     role: Mapped[Role] = mapped_column(
@@ -33,7 +34,7 @@ class MailingStatus(py_enum):
 
 
 class Mailing(Base, IDMixin, CreatedAtMixin):
-    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(MAX_NAME_SIZE), nullable=False)
     send_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

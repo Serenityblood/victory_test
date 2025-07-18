@@ -4,6 +4,8 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
+MAX_NAME_SIZE = 128
+DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 DB_DRIVER = os.getenv("DB_DRIVER", "postgresql+asyncpg")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = int(os.getenv("DB_PORT", 5432))
