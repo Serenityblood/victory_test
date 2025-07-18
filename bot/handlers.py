@@ -70,6 +70,12 @@ async def start(msg: types.Message):
     await msg.answer(text=start_command_text)
 
 
+@router_v1.message(Command("exit"))
+async def get_clear(msg: types.Message, state: FSMContext):
+    await state.clear()
+    await msg.answer(text="Вы чисты как младенец =)")
+
+
 @router_v1.message(Command("adminmenu"))
 async def adminmenu(msg: types.Message, state: FSMContext):
     await state.clear()
@@ -616,7 +622,7 @@ async def get_new_mailing_name(msg: types.Message, state: FSMContext):
 @router_v1.callback_query(F.data == "change_button")
 async def get_button_id(clbk: types.CallbackQuery, state: FSMContext):
     redis_data = await state.get_data()
-    keyboard = redis_data["constructor"]["keyboard"]
+    keyboard = redis_data["constructor"]["extra"]["keyboard"]
     text, kb = generate_choose_index_entities(keyboard, "change_button_")
     await clbk.answer()
     await clbk.message.answer(text=text, reply_markup=kb)
@@ -625,7 +631,7 @@ async def get_button_id(clbk: types.CallbackQuery, state: FSMContext):
 
 @router_v1.callback_query(F.data.startswith("change_button_"))
 async def change_button(clbk: types.CallbackQuery, state: FSMContext):
-    index = clbk.data.split("change_button_")[1]
+    index = int(clbk.data.split("change_button_")[1])
     await state.update_data(data={"change_button_index": index})
     await state.set_state(MailingCreate.change_button_text)
     await clbk.answer()
@@ -644,7 +650,7 @@ async def get_changed_button_text(msg: types.Message, state: FSMContext):
         return
     text = msg.text
     await state.update_data(data={"new_button_text": text})
-    await state.set_state(MailingCreate.new_button_url)
+    await state.set_state(MailingCreate.change_button_url)
     await msg.answer(
         text="Отправьте URL, на который будет вести кнопка. Или 'отмена' для отмены изменений"
     )
@@ -762,9 +768,3 @@ async def exit_constructor(clbk: types.CallbackQuery, state: FSMContext):
     await clbk.answer()
     await clbk.message.answer(text="Вы вышли из конструктора")
     await clbk.message.delete()
-
-
-@router_v1.message(Command("exit"))
-async def get_clear(msg: types.Message, state: FSMContext):
-    await state.clear()
-    await msg.answer(text="Вы чисты как младенец =)")
